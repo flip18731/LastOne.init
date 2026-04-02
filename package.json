@@ -1,0 +1,13 @@
+{
+  "name": "lastone-init",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "preview": "cd frontend && npm run preview",
+    "contract:test": "cd contracts/lastone && cargo test",
+    "contract:build": "cd contracts/lastone && cargo build --release --target wasm32-unknown-unknown",
+    "deploy": "bash scripts/deploy.sh"
+  }
+}

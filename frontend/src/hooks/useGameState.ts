@@ -27,7 +27,6 @@ interface GameState {
 interface UseGameStateReturn extends GameState {
   refresh: () => Promise<void>
   triggerShake: boolean
-  clearShake: () => void
 }
 
 export function useGameState(): UseGameStateReturn {
@@ -53,7 +52,6 @@ export function useGameState(): UseGameStateReturn {
       let revenueStats: RevenueStats
 
       if (USE_MOCK) {
-        // Simulate live data with slight variations in mock
         round = getMockRound()
         config = getMockConfig()
         leaderboard = getMockLeaderboard()
@@ -67,7 +65,7 @@ export function useGameState(): UseGameStateReturn {
         ])
       }
 
-      // Detect new entry → trigger shake
+      // Detect new entry → trigger shake animation
       if (prevEntriesRef.current > 0 && round.entries_count > prevEntriesRef.current) {
         setTriggerShake(true)
         setTimeout(() => setTriggerShake(false), 600)
@@ -85,7 +83,7 @@ export function useGameState(): UseGameStateReturn {
       })
     } catch (err) {
       console.error('Failed to fetch game state:', err)
-      // On error, fall back to mock data
+      // On chain error, fall back to mock with a warning banner
       setState(prev => ({
         ...prev,
         round: prev.round ?? getMockRound(),
@@ -110,6 +108,5 @@ export function useGameState(): UseGameStateReturn {
     ...state,
     refresh: fetchState,
     triggerShake,
-    clearShake: () => setTriggerShake(false),
   }
 }

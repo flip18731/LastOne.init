@@ -1,6 +1,6 @@
 /**
  * Contract interaction layer for LastOne.init
- * Handles all queries and executes against the CosmWasm contract.
+ * Handles all queries against the CosmWasm contract.
  *
  * In demo/testnet mode, falls back to mock data when contract is not yet deployed.
  */
@@ -12,7 +12,9 @@ import { CONTRACT_ADDRESS, CHAIN_CONFIG, ENTRY_FEE_UINIT } from './constants'
 
 async function queryContract<T>(queryMsg: object): Promise<T> {
   const encoded = btoa(JSON.stringify(queryMsg))
-  const url = `${CHAIN_CONFIG.restUrl}/cosmwasm/wasm/v1/contract/${CONTRACT_ADDRESS}/smart/${encoded}`
+  const restUrl = import.meta.env.VITE_REST_URL || CHAIN_CONFIG.restUrl
+  const contractAddr = import.meta.env.VITE_CONTRACT_ADDRESS || CONTRACT_ADDRESS
+  const url = `${restUrl}/cosmwasm/wasm/v1/contract/${contractAddr}/smart/${encoded}`
 
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Contract query failed: ${res.status}`)
@@ -46,85 +48,13 @@ export async function queryPlayerStats(address: string): Promise<PlayerStats> {
   return queryContract<PlayerStats>({ get_player_stats: { address } })
 }
 
-// ===== EXECUTE MESSAGE BUILDERS =====
-// These return the msg object to be used with InterwovenKit's useTx hook
-
-export function buildEnterMsg() {
-  return {
-    contractAddress: CONTRACT_ADDRESS,
-    msg: { enter: {} },
-    funds: [{ denom: 'uinit', amount: String(ENTRY_FEE_UINIT) }],
-  }
-}
-
-export function buildClaimWinMsg() {
-  return {
-    contractAddress: CONTRACT_ADDRESS,
-    msg: { claim_win: {} },
-    funds: [],
-  }
-}
-
-export function buildStartNewRoundMsg() {
-  return {
-    contractAddress: CONTRACT_ADDRESS,
-    msg: { start_new_round: {} },
-    funds: [],
-  }
-}
-
-// ===== USERNAME RESOLUTION =====
-
-const usernameCache = new Map<string, string | null>()
-
-/**
- * Resolve .init username for an address.
- * Returns null if no username registered.
- */
-export async function resolveUsername(address: string): Promise<string | null> {
-  if (usernameCache.has(address)) return usernameCache.get(address) ?? null
-
-  try {
-    // Initia name service resolution
-    const url = `${INITIA_REST}/initia/mstaking/v1/name/${address}`
-    const res = await fetch(url)
-    if (!res.ok) {
-      usernameCache.set(address, null)
-      return null
-    }
-    const data = await res.json()
-    const username = data?.name || null
-    usernameCache.set(address, username)
-    return username
-  } catch {
-    usernameCache.set(address, null)
-    return null
-  }
-}
-
-const INITIA_REST = 'https://rest.initiation-2.initia.xyz'
-
-/**
- * Batch resolve usernames for multiple addresses
- */
-export async function resolveUsernames(addresses: string[]): Promise<Map<string, string | null>> {
-  const results = new Map<string, string | null>()
-  await Promise.all(
-    addresses.map(async (addr) => {
-      const username = await resolveUsername(addr)
-      results.set(addr, username)
-    })
-  )
-  return results
-}
-
 // ===== MOCK DATA (for demo / pre-deployment) =====
 
 export function getMockRound(): Round {
   const now = Math.floor(Date.now() / 1000)
   return {
     id: 42,
-    pot: '234500000',         // 234.5 INIT
+    pot: '234500000',
     entries_count: 47,
     last_entry_address: 'init1abcdef1234567890abcdef1234567890abcd',
     last_entry_username: 'degen.init',
@@ -151,10 +81,10 @@ export function getMockLeaderboard(): WinnerRecord[] {
 
 export function getMockRevenueStats(): RevenueStats {
   return {
-    total_revenue: '47200000',    // 47.2 INIT
+    total_revenue: '47200000',
     total_rounds: 42,
     total_entries: 847,
-    total_pot_distributed: '762000000',  // 762 INIT
+    total_pot_distributed: '762000000',
   }
 }
 
@@ -185,7 +115,7 @@ export function getMockHistoryRounds(): HistoryRound[] {
     id: 41 - i,
     winner: `init1winner${i}`,
     winner_username: ['whale.init', 'degen.init', 'gm.init', 'based.init', 'ngmi.init'][i % 5],
-    pot: String((15 + Math.random() * 200).toFixed(0) + '000000'),
+    pot: String(Math.floor((15 + Math.random() * 200) * 1_000_000)),
     entries_count: Math.floor(10 + Math.random() * 80),
     duration_seconds: Math.floor(120 + Math.random() * 600),
     ended_at: now - (i + 1) * 3600,

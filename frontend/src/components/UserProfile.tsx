@@ -1,57 +1,91 @@
-import { useWallet } from '../hooks/useWallet'
-import { useSessionKey } from '../hooks/useSessionKey'
-import { displayPlayer, formatInit } from '../lib/utils'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useInterwovenKit } from '@initia/interwovenkit-react'
+import { displayPlayer, formatInit, shortenAddress } from '../lib/utils'
+import { CHAIN_CONFIG } from '../lib/constants'
 
 export function UserProfile() {
-  const { address, username, balance, connected } = useWallet()
-  const { session, startSession, endSession, minutesRemaining } = useSessionKey()
-  const [showSessionModal, setShowSessionModal] = useState(false)
-  const [starting, setStarting] = useState(false)
+  const {
+    address,
+    isConnected,
+    username,
+    autoSign,
+    openWallet,
+  } = useInterwovenKit()
 
-  if (!connected) return null
+  const chainId = import.meta.env.VITE_CHAIN_ID || CHAIN_CONFIG.chainId
+  const [showSessionModal, setShowSessionModal] = useState(false)
+  const [minutesRemaining, setMinutesRemaining] = useState(0)
+
+  const isSessionActive = autoSign.isEnabledByChain[chainId] ?? false
+  const sessionExpiry = autoSign.expiredAtByChain[chainId] ?? null
+
+  // Update minutes remaining countdown
+  useEffect(() => {
+    if (!isSessionActive || !sessionExpiry) {
+      setMinutesRemaining(0)
+      return
+    }
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((sessionExpiry.getTime() - Date.now()) / 60000))
+      setMinutesRemaining(remaining)
+    }
+    update()
+    const interval = setInterval(update, 10000)
+    return () => clearInterval(interval)
+  }, [isSessionActive, sessionExpiry])
+
+  if (!isConnected) return null
 
   async function handleStartSession() {
-    setStarting(true)
     try {
-      await startSession()
+      await autoSign.enable(chainId)
       setShowSessionModal(false)
     } catch (err) {
-      console.error(err)
-    } finally {
-      setStarting(false)
+      console.error('Failed to start auto-sign session:', err)
+    }
+  }
+
+  async function handleEndSession() {
+    try {
+      await autoSign.disable(chainId)
+    } catch (err) {
+      console.error('Failed to disable auto-sign:', err)
     }
   }
 
   return (
     <>
       <div className="game-card">
-        {/* Username / Address */}
+        {/* Avatar + identity */}
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#ff0066]
-            flex items-center justify-center text-sm font-bold text-black font-mono">
+          <button
+            onClick={openWallet}
+            className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#ff0066]
+              flex items-center justify-center text-sm font-bold text-black font-mono
+              hover:scale-105 transition-transform"
+          >
             {(username || address || '?')[0].toUpperCase()}
-          </div>
+          </button>
           <div>
             <div className="text-[#e0e0f0] font-mono font-bold text-sm">
-              {displayPlayer(address!, username)}
+              {displayPlayer(address, username)}
             </div>
             <div className="text-[#40405a] text-xs font-mono">
-              {balance ? `${formatInit(balance, 2)} INIT` : '— INIT'}
+              {shortenAddress(address)}
             </div>
           </div>
         </div>
 
         {/* Session status */}
-        {session.active ? (
+        {isSessionActive ? (
           <div className="flex items-center justify-between">
             <div className="session-indicator">
               <span className="w-1.5 h-1.5 rounded-full bg-[#00ff88] animate-pulse" />
               <span>⚡ Session Active — {minutesRemaining}min</span>
             </div>
             <button
-              onClick={endSession}
+              onClick={handleEndSession}
               className="text-xs text-[#40405a] hover:text-[#ff0066] transition-colors font-mono"
             >
               End
@@ -110,6 +144,9 @@ export function UserProfile() {
                     </div>
                   ))}
                 </div>
+                <p className="text-[#40405a] text-xs font-mono mb-4">
+                  Powered by InterwovenKit Auto-Sign — Initia native feature
+                </p>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setShowSessionModal(false)}
@@ -120,11 +157,11 @@ export function UserProfile() {
                   </button>
                   <button
                     onClick={handleStartSession}
-                    disabled={starting}
+                    disabled={autoSign.isLoading}
                     className="flex-1 py-2 rounded-lg bg-[#00ff88] text-black font-mono font-bold text-sm
                       hover:bg-[#00cc70] transition-colors disabled:opacity-50"
                   >
-                    {starting ? 'Starting...' : 'Start Session'}
+                    {autoSign.isLoading ? 'Starting...' : 'Start Session'}
                   </button>
                 </div>
               </div>

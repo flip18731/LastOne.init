@@ -9,4 +9,18 @@ export default defineConfig({
   define: {
     global: 'globalThis',
   },
+  build: {
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'motion': ['framer-motion'],
+          'charts': ['recharts'],
+          'interwovenkit': ['@initia/interwovenkit-react'],
+          'cosmjs': ['@cosmjs/cosmwasm-stargate', '@cosmjs/stargate', '@cosmjs/proto-signing', 'cosmjs-types'],
+        },
+      },
+    },
+  },
 })

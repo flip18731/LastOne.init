@@ -1,22 +1,28 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useInterwovenKit } from '@initia/interwovenkit-react'
+import { MsgExecuteContract } from 'cosmjs-types/cosmwasm/wasm/v1/tx'
+import { toUtf8 } from '@cosmjs/encoding'
 import { useGameState } from '../hooks/useGameState'
-import { useWallet } from '../hooks/useWallet'
-import { useSessionKey } from '../hooks/useSessionKey'
+import { useCountdown } from '../hooks/useCountdown'
 import { Countdown } from './Countdown'
 import { PotDisplay } from './PotDisplay'
 import { EntryFeed } from './EntryFeed'
 import { AICommentator } from './AICommentator'
 import { BridgeDeposit } from './BridgeDeposit'
-import { buildEnterMsg, buildClaimWinMsg } from '../lib/contract'
-import { useCountdown } from '../hooks/useCountdown'
 import { displayPlayer, formatInit } from '../lib/utils'
-import { ENTRY_FEE_UINIT, COUNTDOWN_SECONDS } from '../lib/constants'
+import { CONTRACT_ADDRESS, ENTRY_FEE_UINIT, COUNTDOWN_SECONDS, CHAIN_CONFIG } from '../lib/constants'
 
 export function Arena() {
   const { round, config, revenueStats, loading, error, refresh, triggerShake } = useGameState()
-  const { address, connected, balance } = useWallet()
-  const { session } = useSessionKey()
+  const {
+    address,
+    isConnected,
+    username,
+    requestTxBlock,
+    autoSign,
+  } = useInterwovenKit()
+
   const [entering, setEntering] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [txError, setTxError] = useState<string | null>(null)
@@ -30,43 +36,69 @@ export function Arena() {
 
   const canClaim = round?.status === 'Active'
     && isExpired
-    && connected
+    && isConnected
     && round?.last_entry_address === address
 
-  const hasEnoughBalance = balance && BigInt(balance) >= BigInt(ENTRY_FEE_UINIT)
-  const canEnter = connected && hasEnoughBalance && !entering && round?.status !== 'Ended'
+  const canEnter = isConnected && !entering && round?.status !== 'Ended'
 
   async function handleEnter() {
-    if (!canEnter) return
+    if (!canEnter || !address) return
     setEntering(true)
     setTxError(null)
 
     try {
-      const msg = buildEnterMsg()
-      // TODO: Execute via InterwovenKit useTx hook
-      // For demo: simulate success after 1s
-      await new Promise(r => setTimeout(r, 1000))
+      const msg = MsgExecuteContract.fromPartial({
+        sender: address,
+        contract: CONTRACT_ADDRESS,
+        msg: toUtf8(JSON.stringify({ enter: { username: username ?? undefined } })),
+        funds: [{ denom: 'uinit', amount: String(ENTRY_FEE_UINIT) }],
+      })
+
+      await requestTxBlock({
+        messages: [{ typeUrl: '/cosmwasm.wasm.v1.MsgExecuteContract', value: msg }],
+        chainId: import.meta.env.VITE_CHAIN_ID || CHAIN_CONFIG.chainId,
+        gas: 200_000,
+      })
 
       setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 2000)
+      setTimeout(() => setShowSuccess(false), 2500)
       await refresh()
     } catch (err: unknown) {
-      setTxError(err instanceof Error ? err.message : 'Transaction failed')
+      const msg = err instanceof Error ? err.message : 'Transaction failed'
+      // Ignore user rejection
+      if (!msg.includes('rejected') && !msg.includes('cancel')) {
+        setTxError(msg)
+      }
     } finally {
       setEntering(false)
     }
   }
 
   async function handleClaim() {
-    if (!canClaim) return
+    if (!canClaim || !address) return
     setClaiming(true)
+    setTxError(null)
+
     try {
-      const msg = buildClaimWinMsg()
-      // TODO: Execute via InterwovenKit
-      await new Promise(r => setTimeout(r, 1000))
+      const msg = MsgExecuteContract.fromPartial({
+        sender: address,
+        contract: CONTRACT_ADDRESS,
+        msg: toUtf8(JSON.stringify({ claim_win: {} })),
+        funds: [],
+      })
+
+      await requestTxBlock({
+        messages: [{ typeUrl: '/cosmwasm.wasm.v1.MsgExecuteContract', value: msg }],
+        chainId: import.meta.env.VITE_CHAIN_ID || CHAIN_CONFIG.chainId,
+        gas: 250_000,
+      })
+
       await refresh()
     } catch (err: unknown) {
-      setTxError(err instanceof Error ? err.message : 'Claim failed')
+      const msg = err instanceof Error ? err.message : 'Claim failed'
+      if (!msg.includes('rejected') && !msg.includes('cancel')) {
+        setTxError(msg)
+      }
     } finally {
       setClaiming(false)
     }
@@ -141,7 +173,7 @@ export function Arena() {
             </div>
           </div>
 
-          {/* Enter Button */}
+          {/* Enter / Claim Button */}
           <div className="flex flex-col items-center gap-3">
             <AnimatePresence mode="wait">
               {canClaim ? (
@@ -169,27 +201,25 @@ export function Arena() {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                 >
-                  {!connected
+                  {!isConnected
                     ? 'CONNECT WALLET TO PLAY'
                     : entering
                     ? 'ENTERING...'
-                    : !hasEnoughBalance
-                    ? 'INSUFFICIENT BALANCE'
                     : `ENTER — 1 INIT`}
                 </motion.button>
               )}
             </AnimatePresence>
 
-            {/* Session indicator */}
-            {session.active && (
+            {/* Auto-sign indicator */}
+            {isConnected && autoSign.isEnabledByChain[import.meta.env.VITE_CHAIN_ID || CHAIN_CONFIG.chainId] && (
               <div className="session-indicator text-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00ff88] animate-pulse" />
                 ⚡ Auto-Signing Active
               </div>
             )}
 
-            {/* Bridge link */}
-            {connected && !hasEnoughBalance && <BridgeDeposit />}
+            {/* Bridge link when not connected */}
+            {isConnected && <BridgeDeposit />}
 
             {/* Success flash */}
             <AnimatePresence>
@@ -200,14 +230,13 @@ export function Arena() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                 >
-                  ✓ Entry confirmed! You're currently last!
+                  ✓ Entry confirmed! You&apos;re currently last!
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Error */}
             {txError && (
-              <div className="text-[#ff0066] text-xs font-mono">{txError}</div>
+              <div className="text-[#ff0066] text-xs font-mono max-w-xs text-center">{txError}</div>
             )}
           </div>
 
@@ -229,7 +258,6 @@ export function Arena() {
             last_entry_address={r.last_entry_address}
           />
         </div>
-
       </div>
     </div>
   )

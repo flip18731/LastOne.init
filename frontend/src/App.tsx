@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { InterwovenKitProvider, TESTNET, useInterwovenKit } from '@initia/interwovenkit-react'
 import { ConnectWallet } from './components/ConnectWallet'
 import { Arena } from './components/Arena'
 import { Leaderboard } from './components/Leaderboard'
@@ -8,13 +9,13 @@ import { HowItWorks } from './components/HowItWorks'
 import { RevenueStats } from './components/RevenueStats'
 import { UserProfile } from './components/UserProfile'
 import { useGameState } from './hooks/useGameState'
-import { useWallet } from './hooks/useWallet'
+import { CHAIN_CONFIG } from './lib/constants'
 
 // ===== PAGE LAYOUTS =====
 
 function ArenaPage() {
   const { revenueStats } = useGameState()
-  const { connected } = useWallet()
+  const { isConnected: connected } = useInterwovenKit()
 
   return (
     <div className="space-y-8">
@@ -224,8 +225,18 @@ const pageVariants = {
   exit: { opacity: 0, y: -8 },
 }
 
+// Custom chain config for LastOne.init appchain
+// Falls back to TESTNET defaults for unlaunched chain
+const interwovenConfig = {
+  ...TESTNET,
+  defaultChainId: import.meta.env.VITE_CHAIN_ID || TESTNET.defaultChainId,
+  theme: 'dark' as const,
+  enableAutoSign: true,
+}
+
 export default function App() {
   return (
+    <InterwovenKitProvider {...interwovenConfig}>
     <BrowserRouter>
       <div className="min-h-screen grid-bg">
         <NavBar />
@@ -278,5 +289,6 @@ export default function App() {
         <Footer />
       </div>
     </BrowserRouter>
+    </InterwovenKitProvider>
   )
 }

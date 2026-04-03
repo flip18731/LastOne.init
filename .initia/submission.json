@@ -1,0 +1,25 @@
+{
+  "project_name": "LastOne.init",
+  "tagline": "The Last One Standing Wins Everything",
+  "description": "A reverse-auction game on its own Initia appchain. Players pay 1 INIT to enter, each entry resets a 30-second countdown. The last person to enter before time runs out wins the entire pot. Features AI-powered live commentary via Claude API, session-based auto-signing for one-click entries, cross-chain deposits via Interwoven Bridge, and .init username integration throughout the UI.",
+  "tracks": ["Gaming", "AI", "DeFi"],
+  "team_members": [],
+  "chain_id": "lastone-1",
+  "deployment_link": "https://lastone.init.vercel.app",
+  "txn_link": "FILL_AFTER_DEPLOYMENT",
+  "repository": "https://github.com/flip18731/lastone.init",
+  "demo_video": "FILL_AFTER_RECORDING",
+  "initia_features": [
+    "auto-signing-session-ux",
+    "interwoven-bridge",
+    "initia-usernames"
+  ],
+  "interwovenkit": true,
+  "tech_stack": {
+    "contracts": "CosmWasm (Rust) on Initia Rollup",
+    "frontend": "React 18 + TypeScript + Tailwind CSS + Framer Motion",
+    "wallet": "@initia/interwovenkit-react",
+    "ai": "Claude API (claude-sonnet-4-20250514) for live game commentary",
+    "build": "Vite"
+  }
+}
